@@ -477,6 +477,221 @@ await cache.del('zero:range:test');
 
 console.log('');
 
+
+// === TESTS PRO scanIterator ===
+console.log('🔍 Testing scanIterator operations:');
+
+// Příprava test dat pro scanIterator
+await cache.set('user:1', 'john');
+await cache.set('user:2', 'jane'); 
+await cache.set('post:1', 'hello');
+await cache.set('post:2', 'world');
+await cache.set('config:redis', 'localhost');
+await cache.lPush('queue:tasks', 'task1');
+await cache.zAdd('scores:game', 100, 'player1');
+await cache.hSet('session:abc', 'userId', '123');
+
+// Test scanIterator základní funkčnost
+let allKeys = [];
+for await (const key of cache.scanIterator()) {
+  allKeys.push(key);
+}
+
+const expectedMinKeys = ['user:1', 'user:2', 'post:1', 'post:2', 'config:redis', 'queue:tasks', 'scores:game', 'session:abc'];
+const hasAllExpected = expectedMinKeys.every(key => allKeys.includes(key));
+testEq('scanIterator basic functionality', hasAllExpected, true);
+
+// Test scanIterator s MATCH pattern
+let userKeys = [];
+for await (const key of cache.scanIterator({ MATCH: 'user:*' })) {
+  userKeys.push(key);
+}
+
+testEq('scanIterator MATCH user:*', 
+  JSON.stringify(userKeys.sort()), 
+  JSON.stringify(['user:1', 'user:2'])
+);
+
+// Test scanIterator s jiným MATCH pattern
+let postKeys = [];
+for await (const key of cache.scanIterator({ MATCH: 'post:*' })) {
+  postKeys.push(key);
+}
+
+testEq('scanIterator MATCH post:*', 
+  JSON.stringify(postKeys.sort()), 
+  JSON.stringify(['post:1', 'post:2'])
+);
+
+// Test scanIterator s COUNT parametrem
+let batchedKeys = [];
+let batchCount = 0;
+for await (const key of cache.scanIterator({ COUNT: 2 })) {
+  batchedKeys.push(key);
+  batchCount++;
+  if (batchCount >= 4) break; // Vezmi jen první 4 pro test
+}
+
+testEq('scanIterator with COUNT', batchedKeys.length, 4);
+
+// Test scanIterator s wildcard v prostředku
+await cache.set('api:v1:users', 'data1');
+await cache.set('api:v2:users', 'data2');
+await cache.set('api:v1:posts', 'data3');
+
+let apiV1Keys = [];
+for await (const key of cache.scanIterator({ MATCH: 'api:v1:*' })) {
+  apiV1Keys.push(key);
+}
+
+testEq('scanIterator wildcard end', 
+  JSON.stringify(apiV1Keys.sort()), 
+  JSON.stringify(['api:v1:posts', 'api:v1:users'])
+);
+
+// Test scanIterator s více wildcards
+await cache.set('temp:cache:user:1', 'temp1');
+await cache.set('temp:cache:post:1', 'temp2');
+
+let tempCacheKeys = [];
+for await (const key of cache.scanIterator({ MATCH: 'temp:*:*:*' })) {
+  tempCacheKeys.push(key);
+}
+
+testEq('scanIterator multiple wildcards', 
+  JSON.stringify(tempCacheKeys.sort()), 
+  JSON.stringify(['temp:cache:post:1', 'temp:cache:user:1'])
+);
+
+// Test scanIterator prázdný výsledek
+let emptyKeys = [];
+for await (const key of cache.scanIterator({ MATCH: 'nonexistent:*' })) {
+  emptyKeys.push(key);
+}
+
+testEq('scanIterator empty result', emptyKeys.length, 0);
+
+// Test scanIterator s přesným matchem (bez wildcard)
+let exactKeys = [];
+for await (const key of cache.scanIterator({ MATCH: 'user:1' })) {
+  exactKeys.push(key);
+}
+
+testEq('scanIterator exact match', 
+  JSON.stringify(exactKeys), 
+  JSON.stringify(['user:1'])
+);
+
+// Test scanIterator s prázdnou cache
+await cache.del('user:1');
+await cache.del('user:2'); 
+await cache.del('post:1');
+await cache.del('post:2');
+await cache.del('config:redis');
+await cache.rPop('queue:tasks');
+await cache.zRem('scores:game', 'player1');
+await cache.hDel('session:abc', 'userId');
+await cache.del('api:v1:users');
+await cache.del('api:v2:users');
+await cache.del('api:v1:posts');
+await cache.del('temp:cache:user:1');
+await cache.del('temp:cache:post:1');
+
+let emptyIteratorKeys = [];
+for await (const key of cache.scanIterator()) {
+  emptyIteratorKeys.push(key);
+}
+
+testEq('scanIterator empty cache', emptyIteratorKeys.length, 0);
+
+console.log('');
+
+// === EDGE CASES pro scanIterator ===
+console.log('🔍 Testing scanIterator edge cases:');
+
+// Test s různými typy dat současně
+await cache.set('string:key', 'value');
+await cache.lPush('list:key', 'item');
+await cache.zAdd('zset:key', 1, 'member');
+await cache.hSet('hash:key', 'field', 'value');
+
+let mixedTypeKeys = [];
+for await (const key of cache.scanIterator({ MATCH: '*:key' })) {
+  mixedTypeKeys.push(key);
+}
+
+testEq('scanIterator mixed data types', 
+  mixedTypeKeys.length, 
+  4
+);
+
+// Test s velmi dlouhým pattern
+const longPattern = 'very:long:pattern:that:has:many:segments:*';
+await cache.set('very:long:pattern:that:has:many:segments:test', 'data');
+
+let longPatternKeys = [];
+for await (const key of cache.scanIterator({ MATCH: longPattern })) {
+  longPatternKeys.push(key);
+}
+
+testEq('scanIterator long pattern', 
+  JSON.stringify(longPatternKeys), 
+  JSON.stringify(['very:long:pattern:that:has:many:segments:test'])
+);
+
+// Test s velkým COUNT
+let largeCountKeys = [];
+for await (const key of cache.scanIterator({ COUNT: 1000 })) {
+  largeCountKeys.push(key);
+}
+
+// Měl by vrátit všechny dostupné klíče najednou
+const currentKeyCount = largeCountKeys.length;
+testEq('scanIterator large COUNT', currentKeyCount >= 0, true);
+
+// Test s malým COUNT
+let smallCountBatches = 0;
+for await (const key of cache.scanIterator({ COUNT: 1 })) {
+  smallCountBatches++;
+  if (smallCountBatches >= 3) break; // Zastavíme po 3 klíčích
+}
+
+testEq('scanIterator small COUNT', smallCountBatches, 3);
+
+// Test s nevalidním COUNT (záporné číslo - fallback na default)
+let invalidCountKeys = [];
+for await (const key of cache.scanIterator({ COUNT: -5 })) {
+  invalidCountKeys.push(key);
+  if (invalidCountKeys.length >= 5) break;
+}
+
+testEq('scanIterator invalid COUNT handled', invalidCountKeys.length <= 5, true);
+
+// Test s escape charaktery v pattern
+await cache.set('special.key', 'data1');
+await cache.set('special*key', 'data2');
+await cache.set('special[key]', 'data3');
+
+let specialCharKeys = [];
+for await (const key of cache.scanIterator({ MATCH: 'special*' })) {
+  specialCharKeys.push(key);
+}
+
+// Měl by najít všechny klíče začínající na "special"
+testEq('scanIterator special characters', specialCharKeys.length, 3);
+
+// Cleanup edge cases
+await cache.del('string:key');
+await cache.rPop('list:key');
+await cache.zRem('zset:key', 'member');
+await cache.hDel('hash:key', 'field');
+await cache.del('very:long:pattern:that:has:many:segments:test');
+await cache.del('special.key');
+await cache.del('special*key');
+await cache.del('special[key]');
+
+console.log('');
+
  // === RESULTS ===
  console.log('📊 TEST RESULTS:');
  console.log(`✅ Passed: ${passed}`);

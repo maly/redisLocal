@@ -182,6 +182,49 @@ export const createClient = () => {
             }
             await client.hDel(key, field);
             return deleted ? 1 : 0;
+        },
+
+        //scanIterator
+        scanIterator: async function* (options = {}) {
+            const { MATCH = '*', COUNT = 10 } = options;
+            const allKeys = new Set();
+
+            for (const key of localCache.strings.keys()) {
+                allKeys.add(key);
+            }
+
+            for (const key of localCache.lists.keys()) {
+                allKeys.add(key);
+            }
+
+            for (const key of localCache.sortedSets.keys()) {
+                allKeys.add(key);
+            }
+
+            for (const key of localCache.hashes.keys()) {
+                allKeys.add(key);
+            }
+
+            for (const key of localCache.sets.keys()) {
+                allKeys.add(key);
+            }
+
+            let keys = Array.from(allKeys);
+
+            if (MATCH != '*') {
+                const pattern = '^' + MATCH.replace(/\*/g, '.*') + '$';
+                const regex = new RegExp(pattern);
+                keys = keys.filter(key => regex.test(key));
+            }
+
+            let index = 0;
+            while (index < keys.length) {
+                const batch = keys.slice(index, index + COUNT);
+                index += COUNT;
+                for (const key of batch) {
+                    yield key;
+                }
+            }
         }
     }
 };
