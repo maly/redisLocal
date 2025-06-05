@@ -1,6 +1,7 @@
 import * as redis from "redis";
 
-let client = null;
+let client = null;  
+let myClient = null;
 
 const localCache = {
     strings: new Map(),
@@ -66,11 +67,7 @@ const recoverFromRedis = async (client) => {
   };
 
 
-export const createClient = async (options) => {
-    client = await redis.createClient(options);
-    await client.connect();
-    //read všeho
-    await recoverFromRedis(client);
+export const createClient = () => {
     return {
         set: async (key, value) => {
             localCache.strings.set(key, value);
@@ -183,7 +180,14 @@ export const createClient = async (options) => {
 };
 
 export const getClient = () => {
-    return client;
+    return myClient;
 };
 
-
+export const begin = async (options) => {
+    client = await redis.createClient(options);
+    await client.connect();
+    //read všeho
+    await recoverFromRedis(client);
+    myClient = createClient();
+    return myClient;
+}

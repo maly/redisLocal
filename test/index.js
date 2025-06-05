@@ -2,7 +2,7 @@ import * as redis from "../src/index.js";
 
 let redisURL = "redis://localhost:6379";
 
-let cache = await redis.createClient({
+let cache = await redis.begin({
     url: redisURL
 });
 
