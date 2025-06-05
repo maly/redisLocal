@@ -49,7 +49,8 @@ const recoverFromRedis = async (client) => {
             break;
             
           case 'hash':
-            localCache.hashes.set(key, await client.hGetAll(key));
+            const hashData = await client.hGetAll(key);
+            localCache.hashes.set(key, new Map(Object.entries(hashData)));
             break;
             
           case 'set':
