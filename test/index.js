@@ -202,6 +202,105 @@ testEq('zRem existing item', removed, 1);
 
  console.log('');
 
+
+ // Přidej do test-cache.js
+
+// === HASH TESTS ===
+console.log('🗂️  Testing HASH operations:');
+
+// Test hSet/hGet
+await cache.hSet('test:hash', 'field1', 'value1');
+testEq('hSet first field', await cache.hGet('test:hash', 'field1'), 'value1');
+
+// Test multiple fields
+await cache.hSet('test:hash', 'field2', 'value2');
+await cache.hSet('test:hash', 'field3', 'value3');
+testEq('hGet second field', await cache.hGet('test:hash', 'field2'), 'value2');
+testEq('hGet third field', await cache.hGet('test:hash', 'field3'), 'value3');
+
+// Test hGet non-existent field
+testEq('hGet non-existent field', await cache.hGet('test:hash', 'nonexistent'), null);
+
+// Test hGet non-existent hash
+testEq('hGet from non-existent hash', await cache.hGet('nonexistent:hash', 'field1'), null);
+
+// Test hGetAll
+const allFields = await cache.hGetAll('test:hash');
+const expectedAll = { field1: 'value1', field2: 'value2', field3: 'value3' };
+testEq('hGetAll all fields', JSON.stringify(allFields), JSON.stringify(expectedAll));
+
+// Test hGetAll empty hash
+const emptyHash = await cache.hGetAll('nonexistent:hash');
+testEq('hGetAll non-existent hash', JSON.stringify(emptyHash), JSON.stringify({}));
+
+// Test field overwrite
+await cache.hSet('test:hash', 'field1', 'newvalue1');
+testEq('hSet overwrite field', await cache.hGet('test:hash', 'field1'), 'newvalue1');
+
+const allAfterOverwrite = await cache.hGetAll('test:hash');
+const expectedAfterOverwrite = { field1: 'newvalue1', field2: 'value2', field3: 'value3' };
+testEq('hGetAll after overwrite', JSON.stringify(allAfterOverwrite), JSON.stringify(expectedAfterOverwrite));
+
+// Test hDel
+const deleted1 = await cache.hDel('test:hash', 'field2');
+testEq('hDel existing field', deleted1, 1);
+testEq('hGet after delete', await cache.hGet('test:hash', 'field2'), null);
+
+const allAfterDelete = await cache.hGetAll('test:hash');
+const expectedAfterDelete = { field1: 'newvalue1', field3: 'value3' };
+testEq('hGetAll after delete', JSON.stringify(allAfterDelete), JSON.stringify(expectedAfterDelete));
+
+// Test hDel non-existent field
+const deleted2 = await cache.hDel('test:hash', 'nonexistent');
+testEq('hDel non-existent field', deleted2, 0);
+
+// Test hDel from non-existent hash
+const deleted3 = await cache.hDel('nonexistent:hash', 'field1');
+testEq('hDel from non-existent hash', deleted3, 0);
+
+// Test delete all fields (hash cleanup)
+await cache.hDel('test:hash', 'field1');
+await cache.hDel('test:hash', 'field3');
+const emptyAfterDeleteAll = await cache.hGetAll('test:hash');
+testEq('hGetAll after deleting all fields', JSON.stringify(emptyAfterDeleteAll), JSON.stringify({}));
+
+console.log('');
+
+// === HASH EDGE CASES ===
+console.log('🗂️  Testing HASH edge cases:');
+
+// Empty field name
+await cache.hSet('edge:hash', '', 'empty_field_value');
+testEq('hSet/hGet empty field name', await cache.hGet('edge:hash', ''), 'empty_field_value');
+
+// Empty field value
+await cache.hSet('edge:hash', 'empty_value', '');
+testEq('hSet/hGet empty field value', await cache.hGet('edge:hash', 'empty_value'), null);
+
+// Special characters in field names
+await cache.hSet('edge:hash', 'field:with:colons', 'colon_value');
+await cache.hSet('edge:hash', 'field with spaces', 'space_value');
+await cache.hSet('edge:hash', 'field_with_češstina', 'czech_value');
+
+testEq('hGet field with colons', await cache.hGet('edge:hash', 'field:with:colons'), 'colon_value');
+testEq('hGet field with spaces', await cache.hGet('edge:hash', 'field with spaces'), 'space_value');
+testEq('hGet field with czech chars', await cache.hGet('edge:hash', 'field_with_češstina'), 'czech_value');
+
+// Large hash
+const largeHashKey = 'large:hash';
+for (let i = 0; i < 100; i++) {
+ await cache.hSet(largeHashKey, `field${i}`, `value${i}`);
+}
+
+testEq('large hash field count', Object.keys(await cache.hGetAll(largeHashKey)).length, 100);
+testEq('large hash random field', await cache.hGet(largeHashKey, 'field42'), 'value42');
+
+// Cleanup edge cases
+await cache.del('edge:hash');
+await cache.del('large:hash');
+
+console.log('');
+
  // === RESULTS ===
  console.log('📊 TEST RESULTS:');
  console.log(`✅ Passed: ${passed}`);

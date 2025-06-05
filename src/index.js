@@ -147,6 +147,38 @@ export const createClient = async (options) => {
             await client.zRem(key, value);
             return 1;
         },
+        // === HASH operace ===
+        hSet: async (key, field, value) => {
+            if (!localCache.hashes.has(key)) {
+                localCache.hashes.set(key, new Map());
+            }
+            localCache.hashes.get(key).set(field, value);
+            await client.hSet(key, field, value);
+            return 1;
+        },
+        hGet: async (key, field) => {
+            const hash = localCache.hashes.get(key);
+            return hash ? hash.get(field) || null : null;
+        },
+        hGetAll: async (key) => {
+            const hash = localCache.hashes.get(key);
+            if (!hash) return {};
+            const result = {};
+            for (const [field, value] of hash.entries()) {
+                result[field] = value;
+            }
+            return result;
+        },
+        hDel: async (key, field) => {
+            const hash = localCache.hashes.get(key);
+            if (!hash) return 0;
+            const deleted = hash.delete(field);
+            if (hash.size === 0) {
+                localCache.hashes.delete(key);
+            }
+            await client.hDel(key, field);
+            return deleted ? 1 : 0;
+        }
     }
 };
 
