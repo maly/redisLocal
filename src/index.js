@@ -29,6 +29,7 @@ const recoverFromRedis = async (client) => {
     // Načti každý klíč podle typu
     for (const keyA of keys) {
       try {
+        if (keyA.length==0) continue;
         const key=keyA[0];
         const type = await client.type(key);
 
@@ -58,7 +59,7 @@ const recoverFromRedis = async (client) => {
             break;
         }
       } catch (error) {
-        console.error(`❌ Chyba při načítání klíče ${key}:`, error);
+        console.error(`❌ Chyba při načítání klíče ${keyA[0]}:`, error);
       }
     }
   
