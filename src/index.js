@@ -20,17 +20,15 @@ const recoverFromRedis = async (client) => {
     const keys = [];
     let cursor = 0;
     
-    for await (const key of client.scanIterator()) {
-        keys.push(key);
+    for await (const key of client.scanIterator({MATCH:'*', COUNT:100})) {
+        keys.push(...key);
       }
   
     console.log(`📦 Nalezeno ${keys.length} klíčů`);
   
     // Načti každý klíč podle typu
-    for (const keyA of keys) {
+    for (const key of keys) {
       try {
-        if (keyA.length==0) continue;
-        const key=keyA[0];
         const type = await client.type(key);
 
 //        console.log(key, type);
@@ -59,7 +57,7 @@ const recoverFromRedis = async (client) => {
             break;
         }
       } catch (error) {
-        console.error(`❌ Chyba při načítání klíče ${keyA[0]}:`, error);
+        console.error(`❌ Chyba při načítání klíče ${key}:`, error);
       }
     }
   
