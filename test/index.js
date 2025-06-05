@@ -301,6 +301,182 @@ await cache.del('large:hash');
 
 console.log('');
 
+
+console.log('🎯 Testing zRangeByScore operations:');
+
+// Příprava test dat
+await cache.zAdd('score:test', 10, 'item10');
+await cache.zAdd('score:test', 20, 'item20');
+await cache.zAdd('score:test', 30, 'item30');
+await cache.zAdd('score:test', 40, 'item40');
+await cache.zAdd('score:test', 50, 'item50');
+
+// Test základní range
+const range1 = await cache.zRangeByScore('score:test', 20, 40);
+testEq('zRangeByScore basic range (20-40)', 
+  JSON.stringify(range1), 
+  JSON.stringify(['item20', 'item30', 'item40'])
+);
+
+// Test inclusive boundaries
+const range2 = await cache.zRangeByScore('score:test', 30, 30);
+testEq('zRangeByScore exact score (30)', 
+  JSON.stringify(range2), 
+  JSON.stringify(['item30'])
+);
+
+// Test partial range from start
+const range3 = await cache.zRangeByScore('score:test', 0, 25);
+testEq('zRangeByScore from start (0-25)', 
+  JSON.stringify(range3), 
+  JSON.stringify(['item10', 'item20'])
+);
+
+// Test partial range to end
+const range4 = await cache.zRangeByScore('score:test', 35, 100);
+testEq('zRangeByScore to end (35-100)', 
+  JSON.stringify(range4), 
+  JSON.stringify(['item40', 'item50'])
+);
+
+// Test full range
+const range5 = await cache.zRangeByScore('score:test', 0, 100);
+testEq('zRangeByScore full range (0-100)', 
+  JSON.stringify(range5), 
+  JSON.stringify(['item10', 'item20', 'item30', 'item40', 'item50'])
+);
+
+// Test empty range
+const range6 = await cache.zRangeByScore('score:test', 60, 80);
+testEq('zRangeByScore empty range (60-80)', 
+  JSON.stringify(range6), 
+  JSON.stringify([])
+);
+
+// Test inverted range (min > max)
+const range7 = await cache.zRangeByScore('score:test', 40, 20);
+testEq('zRangeByScore inverted range (40-20)', 
+  JSON.stringify(range7), 
+  JSON.stringify([])
+);
+
+// Test negative scores
+await cache.zAdd('negative:test', -10, 'neg10');
+await cache.zAdd('negative:test', -5, 'neg5');
+await cache.zAdd('negative:test', 0, 'zero');
+await cache.zAdd('negative:test', 5, 'pos5');
+
+const range8 = await cache.zRangeByScore('negative:test', -10, 0);
+testEq('zRangeByScore with negatives (-10 to 0)', 
+  JSON.stringify(range8), 
+  JSON.stringify(['neg10', 'neg5', 'zero'])
+);
+
+const range9 = await cache.zRangeByScore('negative:test', -6, 6);
+testEq('zRangeByScore crossing zero (-6 to 6)', 
+  JSON.stringify(range9), 
+  JSON.stringify(['neg5', 'zero', 'pos5'])
+);
+
+// Test decimal scores
+await cache.zAdd('decimal:test', 1.5, 'one_half');
+await cache.zAdd('decimal:test', 2.7, 'two_seven');
+await cache.zAdd('decimal:test', 3.1, 'three_one');
+
+const range10 = await cache.zRangeByScore('decimal:test', 1.0, 3.0);
+testEq('zRangeByScore with decimals (1.0-3.0)', 
+  JSON.stringify(range10), 
+  JSON.stringify(['one_half', 'two_seven'])
+);
+
+const range11 = await cache.zRangeByScore('decimal:test', 2.6, 3.2);
+testEq('zRangeByScore decimal precision (2.6-3.2)', 
+  JSON.stringify(range11), 
+  JSON.stringify(['two_seven', 'three_one'])
+);
+
+// Test non-existent key
+const range12 = await cache.zRangeByScore('nonexistent:zset', 0, 100);
+testEq('zRangeByScore non-existent key', 
+  JSON.stringify(range12), 
+  JSON.stringify([])
+);
+
+// Test with duplicate scores
+await cache.zAdd('duplicate:test', 10, 'first');
+await cache.zAdd('duplicate:test', 10, 'second');
+await cache.zAdd('duplicate:test', 10, 'third');
+await cache.zAdd('duplicate:test', 20, 'twenty');
+
+const range13 = await cache.zRangeByScore('duplicate:test', 10, 10);
+testEq('zRangeByScore duplicate scores', 
+  range13.includes('second') && range13.includes('third'), 
+  true
+);
+
+// Test large range
+await cache.zAdd('large:test', 1000000, 'million');
+await cache.zAdd('large:test', 999999, 'almost_million');
+
+const range14 = await cache.zRangeByScore('large:test', 999998, 1000001);
+testEq('zRangeByScore large numbers', 
+  JSON.stringify(range14), 
+  JSON.stringify(['almost_million', 'million'])
+);
+
+// Cleanup test data
+await cache.del('score:test');
+await cache.del('negative:test'); 
+await cache.del('decimal:test');
+await cache.del('nonexistent:zset');
+await cache.del('duplicate:test');
+await cache.del('large:test');
+
+console.log('');
+
+// === EDGE CASES pro zRangeByScore ===
+console.log('🎯 Testing zRangeByScore edge cases:');
+
+// Test with very close decimal scores
+await cache.zAdd('precision:test', 1.0001, 'precise1');
+await cache.zAdd('precision:test', 1.0002, 'precise2'); 
+await cache.zAdd('precision:test', 1.0003, 'precise3');
+
+const range15 = await cache.zRangeByScore('precision:test', 1.0001, 1.0002);
+testEq('zRangeByScore high precision', 
+  JSON.stringify(range15), 
+  JSON.stringify(['precise1', 'precise2'])
+);
+
+// Test infinity values (JavaScript specific)
+await cache.zAdd('infinity:test', -Infinity, 'neg_inf');
+await cache.zAdd('infinity:test', Infinity, 'pos_inf');
+await cache.zAdd('infinity:test', 0, 'zero');
+
+const range16 = await cache.zRangeByScore('infinity:test', -Infinity, Infinity);
+testEq('zRangeByScore with infinity', 
+  JSON.stringify(range16), 
+  JSON.stringify(['neg_inf', 'zero', 'pos_inf'])
+);
+
+// Test zero range (min = max = specific value)
+await cache.zAdd('zero:range:test', 42, 'answer');
+await cache.zAdd('zero:range:test', 41, 'close');
+await cache.zAdd('zero:range:test', 43, 'also_close');
+
+const range17 = await cache.zRangeByScore('zero:range:test', 42, 42);
+testEq('zRangeByScore zero width range', 
+  JSON.stringify(range17), 
+  JSON.stringify(['answer'])
+);
+
+// Cleanup edge cases
+await cache.del('precision:test');
+await cache.del('infinity:test');
+await cache.del('zero:range:test');
+
+console.log('');
+
  // === RESULTS ===
  console.log('📊 TEST RESULTS:');
  console.log(`✅ Passed: ${passed}`);

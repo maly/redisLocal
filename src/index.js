@@ -132,6 +132,12 @@ export const createClient = () => {
             if (stop===-1) stop=zset.length-1;
             return zset.slice(start, stop+1).map(item => item.value);
         },
+        zRangeByScore: async (key, min, max) => {
+            const zset = localCache.sortedSets.get(key);
+            if (!zset) return [];
+            const filtered = zset.filter(item => item.score >= min && item.score <= max);
+            return filtered.map(item => item.value);
+        },
         zRem: async (key, value) => {
             const zset = localCache.sortedSets.get(key);
             if (!zset) return 0;
